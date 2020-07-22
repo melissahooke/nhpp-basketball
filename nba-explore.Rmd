@@ -1,0 +1,71 @@
+---
+title: "nba play by play"
+output: pdf_document
+---
+
+```{r,include=FLASE}
+library(dplyr)
+library(ggplot2)
+library(stringr)
+```
+
+```{r}
+nba = read.csv("data/NBA-PBP-2018-2019.csv", na.strings = c(""))
+```
+
+```{r}
+# get the elapsed seconds into game
+nba = nba %>% mutate(SecIntoGame = ifelse(Quarter<5,
+                                          (Quarter-1)*720 + (720-SecLeft),
+                                          (720*4) + (Quarter-5)*300 + (300-SecLeft)))
+```
+
+```{r}
+# only interesting in the plays that involve a shot or free throw
+nba = nba %>% mutate(ShootingPlay = ifelse(!is.na(ShotOutcome)|!is.na(FreeThrowOutcome),1,0))
+
+# which team shot?
+nba = nba %>% mutate(ShootingTeam = ifelse(ShootingPlay==1 & !is.na(HomePlay),"Home",
+                                           ifelse(ShootingPlay==1 & !is.na(AwayPlay),"Away",NA)))
+
+# type of shot
+nba$ShotType = str_match(nba$ShotType,'[23]')
+nba = nba %>% mutate(ShotType = ifelse(!is.na(FreeThrowOutcome),"1",ShotType))
+
+# make sure all the shooting plays have a team assigned
+nba %>% group_by(ShootingPlay,ShootingTeam) %>% summarise(n())
+```
+
+```{r}
+nba = nba %>% filter(ShootingPlay == 1)
+
+# make one team column
+single = nba %>% mutate(Team = ifelse(ShootingTeam == "Home",as.character(HomeTeam),as.character(AwayTeam)))
+
+# which team shot
+single = single %>% mutate(HomeOrAway = ShootingTeam)
+
+# what's the new score
+single = single %>% mutate(Score = ifelse(ShootingTeam == "Home",HomeScore,AwayScore))
+
+# what's the delta score
+single = single %>% mutate(PointsScored = ifelse(ShotOutcome == "make"|FreeThrowOutcome == "make",ShotType,0))
+
+
+#single = single %>% dplyr::select(Date,Time,GameType,Team,HomeOrAway,SecIntoGame,ShotType,)
+```
+
+```{r}
+single %>% filter(Team=="GSW") %>% filter(Quarter<5) %>% ggplot(aes(x=SecIntoGame,y=Score,group=Date,col=interaction(Quarter,GameType))) + geom_line() #+ theme(legend.position = 'none')
+
+single %>% filter(Quarter<5) %>% ggplot(aes(x=SecIntoGame,y=Score,col=Team)) + geom_smooth() #+ theme(legend.position = 'none')
+
+single %>% filter(Quarter<5) %>% ggplot(aes(x=SecIntoGame,y=Score,col=interaction(GameType,HomeOrAway))) + geom_smooth() #+ theme(legend.position = 'none')
+# assign each game a game id
+
+```
+
+```{r}
+single %>% filter(Quarter<5) %>%  filter(Team=="DAL") %>% ggplot() + geom_histogram(aes(x=SecIntoGame,fill=PointsScored),breaks=seq(0,60*48,60))
+```
+
