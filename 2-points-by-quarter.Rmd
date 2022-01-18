@@ -1,0 +1,48 @@
+---
+title: "points-by-quarter"
+output: pdf_document
+---
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+data = read.csv("data/NBA-PBP-2019-2020.csv")
+```
+
+```{r}
+names(data)
+```
+
+```{r}
+d = data %>% dplyr::select(Date,HomeTeam,AwayTeam,Quarter,HomeScore,AwayScore) %>%
+  group_by(Date,HomeTeam,AwayTeam,Quarter) %>% dplyr::summarize(HomeScore = max(HomeScore),AwayScore = max(AwayScore)) %>% 
+  ungroup() %>%
+  pivot_longer(cols=HomeTeam:AwayTeam,names_to="HomeOrAway",values_to = "Team") %>%
+  mutate(Score=ifelse(HomeOrAway=="HomeTeam",HomeScore,AwayScore)) %>%
+  dplyr::select(-HomeScore,-AwayScore) %>% 
+  mutate(HomeOrAway = str_remove(HomeOrAway,"Team")) %>%
+  filter(Quarter <= 4) %>%
+  pivot_wider(id_cols=c("Date","Team","HomeOrAway"),names_from = Quarter,names_prefix = "Quarter", values_from = Score) %>% 
+  mutate(Total = Quarter4) %>%
+  mutate(Quarter4 = Quarter4 - Quarter3, Quarter3 = Quarter3 - Quarter2, Quarter2 = Quarter2 - Quarter1) %>% 
+  pivot_longer(cols=Quarter1:Quarter4,names_to = "Quarter",names_prefix = "Quarter", values_to = "Score") %>%
+  mutate(perc = Score/Total)
+  
+```
+
+```{r,fig.height= 5}
+avg.score.per.quarter = mean(d$Score)
+d %>% ggplot(aes(x=Score,y=Team)) + facet_wrap(~Quarter) + stat_eye() + geom_vline(xintercept = avg.score.per.quarter)
+```
+
+```{r,fig.height= 3}
+d %>% ggplot(aes(x=perc,y=Team)) + facet_wrap(~Quarter) + stat_eye() + geom_vline(xintercept = 0.25,color="red")
+```
+
+```{r}
+m1 = brm(Score~(1|Team/Quarter),data=d,family=poisson())
+```
+
